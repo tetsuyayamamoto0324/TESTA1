@@ -1,78 +1,174 @@
+// src/pages/Auth/Login.tsx
 import { useState } from "react";
 import { supabase } from "../../lib/supabase";
-import {
-  Paper, Stack, Title, TextInput, PasswordInput, Button, Alert, Text, Center,
-} from "@mantine/core";
-import { AlertCircle } from "lucide-react";
+import { z } from "zod";
+import { Alert, Title, Stack } from "@mantine/core";
+import { useForm, zodResolver } from "@mantine/form";
+import { useNavigate, Link, useLocation } from "react-router-dom"; // ★ 追加
+import { useAuth } from "../../store/auth";
 
-// 簡易バリデーション（zodなし版）
-const isEmail = (v: string) => /\S+@\S+\.\S+/.test(v);
+const schema = z.object({
+  email: z.string().min(1, "メールは必須です").email("メール形式が不正です"),
+  password: z.string().min(6, "6文字以上で入力してください"),
+});
+type FormValues = z.infer<typeof schema>;
 
 export default function Login() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation(); // ★ 追加
+  const { setUser } = useAuth();
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false); // ★ 追加
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const form = useForm<FormValues>({
+    initialValues: { email: "", password: "" },
+    validate: zodResolver(schema),
+  });
+
+  const linkBtnStyle: React.CSSProperties = {
+    display: "block",
+    width: "100%",
+    background: "transparent",
+    border: "none",
+    padding: "8px 0",
+    cursor: "pointer",
+    textDecoration: "none",
+  };
+  const linkLabelStyle: React.CSSProperties = {
+    display: "block",
+    textAlign: "center",
+    fontSize: 28,
+    fontWeight: 700,
+    color: "#1f6fff",
+  };
+
+  const onSubmit = form.onSubmit(async (values) => {
     setError(null);
-
-    // フロント側の軽い検証
-    if (!isEmail(email)) return setError("メールアドレスの形式が正しくありません。");
-    if (password.length < 6) return setError("パスワードは6文字以上を入力してください。");
-
     setSubmitting(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: values.email,
+      password: values.password,
+    });
+    console.log("Supabase auth result:", { data, error });
     setSubmitting(false);
 
     if (error) {
-      setError(error.message || "ログインに失敗しました。");
+      setError(error.message);
       return;
     }
-    // 成功時：App側の auth 監視で画面遷移（またはここで任意に遷移）
-  };
+    if (data.user) {
+      setUser({ id: data.user.id, email: data.user.email });
+      // ★ 直前のアクセス先へ戻す（なければ /today）
+      const to = (location.state as any)?.from?.pathname ?? "/today";
+      navigate(to, { replace: true });
+    }
+  });
 
   return (
-    <Center mih="100dvh">
-      <Paper w={360} p="lg" radius="md" withBorder style={{ background: "#E6F8FF" }}>
-        <form onSubmit={onSubmit}>
-          <Stack gap="md">
-            <Title order={3} ta="center">ログイン</Title>
-            <Text ta="center" c="dimmed" size="sm">メールアドレスでログイン</Text>
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "#E6F7FF",
+        display: "grid",
+        placeItems: "center",
+        padding: 16,
+      }}
+    >
+      <div style={{ width: "100%", maxWidth: 520 }}>
+        <Title order={2} ta="center" fw={700} mb={28}>
+          ログイン
+        </Title>
+        <Title order={5} ta="center" c="dimmed" fw={600} mb={20}>
+          メールアドレスでログイン
+        </Title>
 
-            {error && (
-              <Alert variant="light" color="red" icon={<AlertCircle size={16} />}>
-                {error}
-              </Alert>
-            )}
+        {error && (
+          <Alert color="red" mb="sm" style={{ maxWidth: 520, margin: "0 auto" }}>
+            {error}
+          </Alert>
+        )}
 
-            <TextInput
-              label="メールアドレス"
-              value={email}
-              onChange={(e) => setEmail(e.currentTarget.value)}
-              required
-              placeholder="you@example.com"
-            />
+        {/* ★ ボタンを含め、すべて form の中に入れる */}
+        <form onSubmit={onSubmit} style={{ maxWidth: 520, margin: "0 auto" }}>
+          <Stack gap={24}>
+            <div
+              style={{
+                background: "#fff",
+                border: "1px solid #000",
+                boxShadow: "0 4px 8px rgba(0,0,0,0.25)",
+                padding: "10px 14px",
+                width: "100%",
+              }}
+            >
+              <input
+                name="email"
+                type="email"
+                placeholder="メールアドレス"
+                autoComplete="email"
+                style={{
+                  WebkitBoxShadow: "0 0 0px 1000px #fff inset",
+                  WebkitTextFillColor: "#000",
+                  width: "100%",
+                  border: "none",
+                  outline: "none",
+                  background: "transparent",
+                  fontSize: 16,
+                }}
+                {...form.getInputProps("email")}
+              />
+            </div>
 
-            <PasswordInput
-              label="パスワード"
-              value={password}
-              onChange={(e) => setPassword(e.currentTarget.value)}
-              required
-              placeholder="6文字以上"
-            />
+            <div
+              style={{
+                background: "#fff",
+                border: "1px solid #000",
+                boxShadow: "0 4px 8px rgba(0,0,0,0.25)",
+                padding: "10px 14px",
+                width: "100%",
+              }}
+            >
+              <input
+                name="password"
+                type="password"
+                placeholder="パスワード"
+                autoComplete="current-password"
+                style={{
+                  WebkitBoxShadow: "0 0 0px 1000px #fff inset",
+                  WebkitTextFillColor: "#000",
+                  width: "100%",
+                  border: "none",
+                  outline: "none",
+                  background: "transparent",
+                  fontSize: 16,
+                }}
+                {...form.getInputProps("password")}
+              />
+            </div>
 
-            <Button type="submit" loading={submitting}>
-              ログイン
-            </Button>
-
-            <Text ta="center" size="sm" c="blue" style={{ cursor: "pointer" }}>
-              アカウント作成へ
-            </Text>
+            {/* 送信ボタン（フォーム内） */}
+            <button
+              type="submit"
+              disabled={submitting}
+              style={{
+                ...linkBtnStyle,
+                marginTop: 16,
+                opacity: submitting ? 0.5 : 1,
+                pointerEvents: submitting ? "none" : "auto",
+              }}
+            >
+              <span style={linkLabelStyle}>ログイン</span>
+            </button>
           </Stack>
         </form>
-      </Paper>
-    </Center>
+
+        {/* 新規登録へ（同じ見た目） */}
+        <div style={{ marginTop: 28 }}>
+          <Link to="/signup" style={linkBtnStyle}>
+            <span style={linkLabelStyle}>新規登録へ</span>
+          </Link>
+        </div>
+      </div>
+    </div>
   );
 }
