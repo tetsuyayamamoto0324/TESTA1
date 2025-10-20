@@ -1,0 +1,33 @@
+.twoCol {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px clamp(12px, 2vw, 20px);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: stretch;
+  border-top: 1px solid var(--mantine-color-default-border);
+  border-bottom: 1px solid var(--mantine-color-default-border);
+  min-height: 220px;
+  position: relative; /* ★ 親基準で線を置く */
+}
+
+/* 親の中央に縦線。オフセットは transform で確実に移動 */
+.vline::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;          /* セクション全高に伸ばす */
+  left: 50%;          /* 中央を基準に */
+  transform: translate(
+    var(--vline-offset, 0px),      /* ← 横（+で右 / −で左） */
+    var(--vline-offset-y, 0px)     /* ← 縦（+で下 / −で上） */
+  );
+  border-left: 1px solid rgba(0,0,0,.25);
+  width: 1px;
+  top: calc(0px - var(--vline-extend, 0px));
+  bottom: calc(0px - var(--vline-extend, 0px));
+  background: var(--mantine-color-default-border, rgba(0,0,0,.15));
+  opacity: .7;
+  pointer-events: none;
+  z-index: 2;
+}

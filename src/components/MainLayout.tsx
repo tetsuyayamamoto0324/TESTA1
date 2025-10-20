@@ -11,14 +11,12 @@ const tabs = [
 ];
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
-  const nav = useNavigate();
+  const nav = useNavigate();                 // ← 追加
   const loc = useLocation();
-  const { user, setUser } = useAuth();
+  const { user, setUser } = useAuth();       // ← 追加
 
-  // 現在のパスをタブの value にする
-  const current = tabs.some(t => loc.pathname.startsWith(t.value))
-    ? tabs.find(t => loc.pathname.startsWith(t.value))!.value
-    : "/today";
+  const current =
+    tabs.find((t) => loc.pathname.startsWith(t.value))?.value ?? "/today";
 
   const onTabChange = (v: string | null) => {
     if (v) nav(v);
@@ -33,10 +31,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   return (
     <AppShell
       header={{ height: 64 }}
-      padding="0"
+      padding={0}
       withBorder
       styles={{
-        main: { backgroundColor: "#E6F7FF", minHeight: "100vh" },
+        main: { backgroundColor: "#E6F7FF", minHeight: "100vh", padding: 0 },
       }}
     >
       <AppShell.Header>
@@ -47,9 +45,17 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             <Button variant="light" onClick={logout}>ログアウト</Button>
           </Group>
         </Group>
-        <Tabs value={current} onChange={onTabChange} variant="outline" keepMounted={false} px="md" mb="sm">
+
+        <Tabs
+          value={current}
+          onChange={onTabChange}
+          variant="outline"
+          keepMounted={false}
+          px="md"
+          mb="sm"
+        >
           <Tabs.List>
-            {tabs.map(t => (
+            {tabs.map((t) => (
               <Tabs.Tab key={t.value} value={t.value}>{t.label}</Tabs.Tab>
             ))}
           </Tabs.List>

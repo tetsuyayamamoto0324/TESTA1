@@ -1,31 +1,65 @@
 // src/components/HeaderBar.tsx
-import React from "react";
+import React, { useState } from "react";
+import Modal from "@/components/Modal";
+import { useAuth } from "@/store/auth";
 
 type Props = {
   date?: Date;
   city?: string;
   onMenuClick?: () => void;
   onCityClick?: () => void;
+  /** 天気の再取得（親コンポーネントが実装して渡す） */
+  onRefetchWeather?: () => Promise<void> | void;
 };
 
 const jpWeek = ["日", "月", "火", "水", "木", "金", "土"];
 
 export default function HeaderBar({
   date = new Date(),
-  city = "東京都",
+  city,
   onMenuClick,
   onCityClick,
+  onRefetchWeather,
 }: Props) {
+  const cityLabel = city && city.trim() ? city : "東京都";
+  const { user, signOut } = useAuth();
   const m = date.getMonth() + 1;
   const d = date.getDate();
   const dow = jpWeek[date.getDay()];
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [refetching, setRefetching] = useState(false);
+  const [refetchMsg, setRefetchMsg] = useState("");
+
+  const handleRefetchClick = async () => {
+    try {
+      setRefetchMsg("");
+      setRefetching(true);
+      await onRefetchWeather?.();
+      setRefetchMsg("最新の天気を取得しました");
+    } catch {
+      setRefetchMsg("取得に失敗しました");
+    } finally {
+      setRefetching(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+    } finally {
+      setMenuOpen(false);
+    }
+  };
 
   return (
     <>
       <header style={styles.header}>
         <div style={styles.inner}>
-          {/* 左：日付（普通表記・ボックスなし） */}
-          <div style={styles.dateText}>{m}/{d}</div>
+          {/* 左：日付 */}
+          <div style={styles.dateText}>
+            {m}/{d}
+          </div>
 
           {/* 中央：都市 + 曜日 */}
           <button
@@ -35,19 +69,77 @@ export default function HeaderBar({
             style={styles.cityBtn}
             title="都市を変更"
           >
-            <span style={styles.cityText}>{city}</span>
+            <span style={styles.cityText}>{cityLabel}</span>
             <span style={styles.dowText}>（{dow}）</span>
           </button>
 
           {/* 右：menu */}
-          <button type="button" style={styles.menuBtn} onClick={onMenuClick} aria-label="メニュー">
+          <button
+            type="button"
+            style={styles.menuBtn}
+            onClick={() => {
+              onMenuClick?.();
+              setMenuOpen(true);
+            }}
+            aria-label="メニュー"
+          >
             menu
           </button>
         </div>
       </header>
 
-      {/* fixed のかぶり回避 */}
+      {/* fixed の被り回避 */}
       <div style={styles.spacer} />
+
+      {/* モーダル（タイトルなし） */}
+      <Modal open={menuOpen} onClose={() => setMenuOpen(false)}>
+        <div style={{ display: "grid", gap: 14 }}>
+          <div><strong>ログイン中のユーザー</strong></div>
+
+          {/* メール表示 */}
+          <div style={{ fontSize: 14, opacity: 0.9 }}>
+            {user?.email ?? "（未ログイン）"}
+          </div>
+
+          {/* 天気再取得 */}
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button
+              type="button"
+              onClick={handleRefetchClick}
+              disabled={refetching}
+              style={{
+                border: "1px solid rgba(0,0,0,.45)",
+                borderRadius: 8,
+                padding: "8px 14px",
+                background: "#fff",
+                cursor: "pointer",
+              }}
+            >
+              {refetching ? "再取得中…" : "再取得"}
+            </button>
+            <span style={{ fontSize: 12, opacity: 0.8 }}>{refetchMsg}</span>
+          </div>
+
+          <hr style={{ border: "none", borderTop: "1px solid rgba(0,0,0,.12)" }} />
+
+          {/* ログアウト */}
+          <button
+            type="button"
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "#e03131",
+              fontWeight: 800,
+              fontSize: 16,
+              cursor: "pointer",
+              justifySelf: "start",
+            }}
+            onClick={handleLogout}
+          >
+            ログアウト
+          </button>
+        </div>
+      </Modal>
     </>
   );
 }
@@ -60,7 +152,6 @@ const styles: Record<string, React.CSSProperties> = {
     right: 0,
     zIndex: 1000,
     background: "#e6f7ff",
-    /* 青→薄い黒の線に変更 */
     borderBottom: "1px solid rgba(0,0,0,.25)",
     boxShadow: "0 2px 10px rgba(0,0,0,.06)",
   },
@@ -74,8 +165,6 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 8,
     minHeight: "clamp(64px, 9vh, 96px)",
   },
-
-  /* ← 日付はテキストのみ・大きく */
   dateText: {
     justifySelf: "start",
     fontSize: "clamp(20px, 4.6vw, 32px)",
@@ -83,7 +172,6 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: ".5px",
     lineHeight: 1,
   },
-
   cityBtn: {
     justifySelf: "center",
     display: "inline-flex",
@@ -100,9 +188,12 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: "hidden",
     textOverflow: "ellipsis",
   },
-  cityText: { fontSize: "clamp(20px, 5.2vw, 28px)", fontWeight: 800, letterSpacing: ".5px" },
+  cityText: {
+    fontSize: "clamp(20px, 5.2vw, 28px)",
+    fontWeight: 800,
+    letterSpacing: ".5px",
+  },
   dowText: { fontSize: "clamp(12px, 2.6vw, 16px)", opacity: 0.8, color: "#334" },
-
   menuBtn: {
     justifySelf: "end",
     background: "#fff",
@@ -114,8 +205,5 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "clamp(14px, 3.4vw, 18px)",
     cursor: "pointer",
   },
-
-  spacer: {
-    height: "clamp(64px, 9vh, 96px)",
-  },
+  spacer: { height: "clamp(64px, 9vh, 96px)" },
 };
