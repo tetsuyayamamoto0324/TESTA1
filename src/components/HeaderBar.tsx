@@ -3,12 +3,24 @@ import React, { useState } from "react";
 import Modal from "@/components/Modal";
 import { useAuth } from "@/store/auth";
 
+const MODAL_SHIFT_X = 150;
+const MODAL_SHIFT_Y = 0;
+const TITLE_OFFSET_X = 5;
+const TITLE_OFFSET_Y = 0;
+const EMAIL_OFFSET_X = 0;
+const REFETCH_OFFSET_X = 40;  // ボタン行を左右に（+で右 / −で左）
+const REFETCH_OFFSET_Y = 0;
+const LOGOUT_OFFSET_X = 33; // ボタン行を左右に（+で右 / −で左）
+const LOGOUT_OFFSET_Y = 0;
+
+const REFETCH_ALIGN: "start" | "center" | "end" = "start";
+const LOGOUT_ALIGN: "start" | "center" | "end" = "start";
+
 type Props = {
   date?: Date;
   city?: string;
   onMenuClick?: () => void;
   onCityClick?: () => void;
-  /** 天気の再取得（親コンポーネントが実装して渡す） */
   onRefetchWeather?: () => Promise<void> | void;
 };
 
@@ -23,7 +35,9 @@ export default function HeaderBar({
 }: Props) {
   const cityLabel = city && city.trim() ? city : "東京都";
   const { user, signOut } = useAuth();
-  const m = date.getMonth() + 1;
+
+  // ▼ ここを m → month に
+  const month = date.getMonth() + 1;
   const d = date.getDate();
   const dow = jpWeek[date.getDay()];
 
@@ -58,7 +72,7 @@ export default function HeaderBar({
         <div style={styles.inner}>
           {/* 左：日付 */}
           <div style={styles.dateText}>
-            {m}/{d}
+            {month}/{d}
           </div>
 
           {/* 中央：都市 + 曜日 */}
@@ -91,58 +105,116 @@ export default function HeaderBar({
       {/* fixed の被り回避 */}
       <div style={styles.spacer} />
 
-      {/* モーダル（タイトルなし） */}
+      {/* モーダル */}
       <Modal open={menuOpen} onClose={() => setMenuOpen(false)}>
-        <div style={{ display: "grid", gap: 14 }}>
-          <div><strong>ログイン中のユーザー</strong></div>
+  <div style={menuStyles.wrap}>
+    <div style={menuStyles.title}>ログイン中のユーザー</div>
 
-          {/* メール表示 */}
-          <div style={{ fontSize: 14, opacity: 0.9 }}>
-            {user?.email ?? "（未ログイン）"}
-          </div>
+    <div style={menuStyles.emailRow}>
+      <span style={menuStyles.emailText}>
+        {user?.email ?? "（未ログイン）"}
+      </span>
+    </div>
 
-          {/* 天気再取得 */}
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button
-              type="button"
-              onClick={handleRefetchClick}
-              disabled={refetching}
-              style={{
-                border: "1px solid rgba(0,0,0,.45)",
-                borderRadius: 8,
-                padding: "8px 14px",
-                background: "#fff",
-                cursor: "pointer",
-              }}
-            >
-              {refetching ? "再取得中…" : "再取得"}
-            </button>
-            <span style={{ fontSize: 12, opacity: 0.8 }}>{refetchMsg}</span>
-          </div>
+    <div style={menuStyles.refetchRow}>
+      <button
+        type="button"
+        onClick={handleRefetchClick}
+        disabled={refetching}
+        style={menuStyles.refetchBtn}
+      >
+        {refetching ? "再取得中…" : "再取得"}
+      </button>
+      <span style={menuStyles.note}>{refetchMsg}</span>
+    </div>
 
-          <hr style={{ border: "none", borderTop: "1px solid rgba(0,0,0,.12)" }} />
+    <hr style={menuStyles.hr} />
 
-          {/* ログアウト */}
-          <button
-            type="button"
-            style={{
-              background: "transparent",
-              border: "none",
-              color: "#e03131",
-              fontWeight: 800,
-              fontSize: 16,
-              cursor: "pointer",
-              justifySelf: "start",
-            }}
-            onClick={handleLogout}
-          >
-            ログアウト
-          </button>
-        </div>
-      </Modal>
+    {/* ← ここを “行” で包む */}
+    <div style={menuStyles.logoutRow}>
+      <button type="button" style={menuStyles.logoutBtn} onClick={handleLogout}>
+        ログアウト
+      </button>
+    </div>
+  </div>
+</Modal>
     </>
   );
 }
+
+// ▼ ここも m → menuStyles に
+const menuStyles: Record<string, React.CSSProperties> = {
+  wrap: {
+    display: "grid",
+    gap: 16,
+    padding: "6px 4px",
+    marginLeft: MODAL_SHIFT_X,
+    marginTop: MODAL_SHIFT_Y,
+  },
+  title: {
+    fontWeight: 800,
+    fontSize: 18,
+    letterSpacing: ".2px",
+    marginLeft: TITLE_OFFSET_X,
+    marginTop: TITLE_OFFSET_Y,
+    // textAlign: "center",
+  },
+  emailRow: {
+    paddingLeft: 2,
+    marginLeft: EMAIL_OFFSET_X,
+  },
+  emailText: { fontSize: 14, opacity: 0.9 },
+  row: { display: "flex", alignItems: "center", gap: 10, marginTop: 4 },
+  refetchBtn: {
+    border: "1px solid rgba(0,0,0,.45)",
+    borderRadius: 8,
+    padding: "8px 14px",
+    background: "#fff",
+    cursor: "pointer",
+  },
+  note: { fontSize: 12, opacity: 0.8 },
+  hr: { border: "none", borderTop: "1px solid rgba(0,0,0,.12)", marginTop: 6 },
+  logout: {
+    background: "transparent",
+    border: "none",
+    color: "#e03131",
+    fontWeight: 800,
+    fontSize: 16,
+    cursor: "pointer",
+    justifySelf: "start",
+  },
+  refetchRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    marginLeft: REFETCH_OFFSET_X,  // ← ここで左右微調整
+    marginTop: REFETCH_OFFSET_Y,   // ← ここで上下微調整
+    justifyContent:
+      REFETCH_ALIGN === "end" ? "flex-end" :
+      REFETCH_ALIGN === "center" ? "center" : "flex-start",
+  },
+
+logoutRow: {
+    display: "flex",
+    alignItems: "center",
+    marginLeft: LOGOUT_OFFSET_X,
+    marginTop: LOGOUT_OFFSET_Y,
+    justifyContent:
+      LOGOUT_ALIGN === "end" ? "flex-end" :
+      LOGOUT_ALIGN === "center" ? "center" : "flex-start",
+  },
+
+  // ▼ 追加：ログアウトボタン（再取得と同じ形）
+  logoutBtn: {
+    border: "1px solid rgba(0,0,0,.45)",
+    borderRadius: 8,
+    padding: "8px 14px",
+    background: "#fff",
+    cursor: "pointer",
+    fontWeight: 800,
+    color: "#e03131",
+  },
+};
 
 const styles: Record<string, React.CSSProperties> = {
   header: {

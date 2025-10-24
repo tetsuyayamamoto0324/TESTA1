@@ -1,20 +1,32 @@
 import React, { useMemo, useState } from "react";
+import TodoModal from "@/components/TodoModal";
+import ErrorModal from "@/components/ErrorModal";
+import { AppError, normalizeError, messageFor } from "@/lib/appError";
+import { z } from "zod";
+import { supabase } from "@/lib/supabase"; // 例
 
+const clip = (text: string, max: number) => {
+  // Array.from でコードポイント分割（サロゲート対策）
+  const arr = Array.from(text);
+  return arr.length <= max ? text : arr.slice(0, max).join("") + "…";
+};
 /** ローカルストレージ保存キー */
 const LS_KEY = "todo-cal-v1";
+const LONG_LINE_MAX = 10;   // 長文モード（中央1行表示）の最大文字数
+const ITEM_LINE_MAX = 10;
 
 /** 位置と幅（UIを右に寄せたい時は CAL_SHIFT_X を+方向に） */
-const CAL_SHIFT_X = 290;   // カレンダー全体を右へ
-const CAL_SHIFT_Y = -50;     // 上下位置（必要なら負の値）
+const CAL_SHIFT_X = 290;
+const CAL_SHIFT_Y = 30;
 const BOX_W = 840;
-const TITLE_SHIFT_X = 440;   // 水平方向（px）
+const TITLE_SHIFT_X = 440;
 const TITLE_SHIFT_Y = -10;
-const WEEK_SHIFT_X = 10;   // 右へ +、左へ −
-const WEEK_SHIFT_Y = -6;   // 垂直方向（px）        // カレンダーの見た目幅（表＋見出しの基準）
-const ARROW_SIZE       = 60;  // 矢印
-const SIDE_MONTH_SIZE  = 30;  // 左右「◯月」
-const CENTER_YM_SIZE   = 40;  // 中央「YYYY / M」
-const CENTER_YM_WEIGHT = 900; // 太さ
+const WEEK_SHIFT_X = 10;
+const WEEK_SHIFT_Y = -6;
+const ARROW_SIZE = 60;
+const SIDE_MONTH_SIZE = 30;
+const CENTER_YM_SIZE = 40;
+const CENTER_YM_WEIGHT = 900;
 
 /** 日付 → "YYYY-MM-DD" */
 const ymd = (d: Date) =>
@@ -40,8 +52,7 @@ function saveTodos(v: TodoMap) {
 function buildMonthMatrix(viewYear: number, viewMonth: number) {
   const first = new Date(viewYear, viewMonth, 1);
   const firstDow = first.getDay(); // 0: Sun
-  // 表の先頭 = 「その週のSun」
-  const start = new Date(viewYear, viewMonth, 1 - firstDow);
+  const start = new Date(viewYear, viewMonth, 1 - firstDow); // 表の先頭=その週のSun
 
   const cells: { date: Date; inMonth: boolean }[] = [];
   for (let i = 0; i < 42; i++) {
@@ -58,6 +69,81 @@ export default function CalendarTodo() {
   const [viewMonth, setViewMonth] = useState(today.getMonth()); // 0-11
   const [todos, setTodos] = useState<TodoMap>(() => loadTodos());
 
+  // ▼ モーダル用
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalDate, setModalDate] = useState<Date | null>(null);
+  const [modalInitial, setModalInitial] = useState("");
+  const [modalShowDelete, setModalShowDelete] = useState(false);
+  const [errOpen, setErrOpen] = useState(false);
+  const [errMsg, setErrMsg] = useState("");
+  const [errRetry, setErrRetry] = useState<null | (() => void)>(null);
+  const showError = (e: unknown, retry?: () => void) => {
+  const appErr = normalizeError(e);
+  setErrMsg(messageFor(appErr.kind, appErr.message));
+  setErrRetry(retry ?? null);
+  setErrOpen(true);
+};
+
+async function fetchSomething() {
+  try {
+    const res = await fetch("/api/data");
+    if (!res.ok) {
+      throw { status: res.status, message: await res.text() }; // normalizeErrorが拾う
+    }
+    return await res.json();
+  } catch (e) {
+    showError(e, () => fetchSomething()); // 再試行つき
+  }
+}
+
+// 例2) 新規登録（CREATE_FAIL）
+// スキーマは Zod で検証する例
+const NewTodo = z.object({
+  title: z.string().min(1).max(200),
+  date: z.string(), // 例: "2025-01-01"
+});
+
+async function createTodo(input: unknown) {
+  // スキーマ検証
+  const parsed = NewTodo.safeParse(input);
+  if (!parsed.success) {
+    showError(new AppError("SCHEMA", parsed.error.issues.map(i => i.message).join("\n")));
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/todos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(parsed.data),
+    });
+    if (!res.ok) {
+      throw new AppError("CREATE_FAIL", `作成失敗（${res.status}）`);
+    }
+    // 成功処理...
+  } catch (e) {
+    showError(e, () => createTodo(input));
+  }
+}
+
+async function signUp(email: string, password: string) {
+  try {
+    const { error } = await supabase.auth.signUp({ email, password });
+    if (error) throw error; // normalizeError が EMAIL_EXISTS / AUTH_FAIL を判定
+    // 成功処理...
+  } catch (e) {
+    showError(e, () => signUp(email, password));
+  }
+}
+
+async function signIn(email: string, password: string) {
+  try {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error; // -> AUTH_FAIL
+  } catch (e) {
+    showError(e, () => signIn(email, password));
+  }
+}
   const cells = useMemo(
     () => buildMonthMatrix(viewYear, viewMonth),
     [viewYear, viewMonth]
@@ -76,16 +162,37 @@ export default function CalendarTodo() {
     setViewMonth(m.getMonth());
   };
 
+  const keyFromDate = (d: Date) => ymd(d);
+
+  // ▼ クリックでモーダルを開く
   const editDay = (d: Date) => {
-    const key = ymd(d);
+    const key = keyFromDate(d);
     const cur = todos[key] ?? [];
-    const initial = cur.join("\n");
-    const input = window.prompt(
-      `この日のToDo（1行1件）\n空で保存すると削除します`,
-      initial
-    );
-    if (input === null) return; // cancel
-    const lines = input
+    setModalDate(d);
+    setModalInitial(cur.join("\n"));
+    setModalShowDelete(cur.length > 0);
+    setModalOpen(true);
+  };
+  const handleDeleteModal = () => {
+  if (!modalDate) return;
+  const key = ymd(modalDate);
+
+  const nextTodos: TodoMap = { ...todos };
+  delete nextTodos[key];
+
+  setTodos(nextTodos);
+  saveTodos(nextTodos);
+
+  setModalOpen(false);
+  setModalDate(null);
+};
+
+  // ▼ モーダル保存
+  const handleSaveModal = (text: string) => {
+    if (!modalDate) return;
+    const key = keyFromDate(modalDate);
+
+    const lines = text
       .split("\n")
       .map((s) => s.trim())
       .filter(Boolean);
@@ -96,6 +203,9 @@ export default function CalendarTodo() {
 
     setTodos(nextTodos);
     saveTodos(nextTodos);
+
+    setModalOpen(false);
+    setModalDate(null);
   };
 
   const styles: Record<string, React.CSSProperties> = {
@@ -104,46 +214,37 @@ export default function CalendarTodo() {
       margin: "0 auto",
       padding: "16px clamp(12px, 2vw, 20px) 80px",
     },
-
-    /** ← ここで全体をまとめて動かす（中身は触らない） */
     shift: {
       width: "100%",
       display: "flex",
       justifyContent: "center",
       transform: `translate(${CAL_SHIFT_X}px, ${CAL_SHIFT_Y}px)`,
     },
-
-    /** カレンダー本体の箱（幅を固定して中央に） */
-    box: {
-      width: BOX_W,
-    },
-
+    box: { width: BOX_W },
     title: {
-    fontSize: "clamp(20px, 3.6vw, 32px)",
-    fontWeight: 800,
-    textAlign: "center",
-    marginTop: 24,
-    marginBottom: 10,
-    transform: `translate(${TITLE_SHIFT_X}px, ${TITLE_SHIFT_Y}px)`, // ★追加
-  },
-
+      fontSize: "clamp(20px, 3.6vw, 32px)",
+      fontWeight: 800,
+      textAlign: "center",
+      marginTop: 24,
+      marginBottom: 10,
+      transform: `translate(${TITLE_SHIFT_X}px, ${TITLE_SHIFT_Y}px)`,
+    },
     weekHead: {
-  display: "grid",
-  gridTemplateColumns: "repeat(7, 1fr)",
-  gap: 0,
-  margin: "12px auto 6px",
-  width: "295%",
-  fontWeight: 800,
-  letterSpacing: ".5px",
-  columnGap: 24,  
-  transform: `translate(${WEEK_SHIFT_X}px, ${WEEK_SHIFT_Y}px)`, // ★追加
-},
+      display: "grid",
+      gridTemplateColumns: "repeat(7, 1fr)",
+      gap: 0,
+      margin: "12px auto 6px",
+      width: "295%",
+      fontWeight: 800,
+      letterSpacing: ".5px",
+      columnGap: 24,
+      transform: `translate(${WEEK_SHIFT_X}px, ${WEEK_SHIFT_Y}px)`,
+    },
     weekCell: {
       textAlign: "center",
       padding: "8px 4px",
       opacity: 0.9,
     },
-
     grid: {
       margin: "0 auto",
       width: "300%",
@@ -192,7 +293,6 @@ export default function CalendarTodo() {
       textOverflow: "ellipsis",
       whiteSpace: "nowrap",
     },
-
     navRow: {
       margin: "14px auto 0",
       width: "100%",
@@ -209,26 +309,36 @@ export default function CalendarTodo() {
       cursor: "pointer",
       userSelect: "none",
     },
-     navTxt: {
-    fontWeight: 800,
-    fontSize: SIDE_MONTH_SIZE,     // ← 左右「◯月」の文字サイズ
-  },
-
-  arrow: {
-    fontSize: ARROW_SIZE,          // ← 矢印サイズ
-    lineHeight: 1,
-    transform: "translateY(-2px)", // 既存の調整が必要なら残す
-  },
-
-  centerYM: {
-    fontSize: CENTER_YM_SIZE,      // ← 中央「YYYY / M」の文字サイズ
-    fontWeight: CENTER_YM_WEIGHT,
-  },
-
-    navPrevOffset: { transform: "translate(250px, 8px)" },    // 左ブロック（←）を左へ40 / 下へ8
-    navCenterOffset: { transform: "translate(430px, -6px)" }, // 中央の「YYYY / M」を右へ20 / 上へ6
+    navTxt: {
+      fontWeight: 800,
+      fontSize: SIDE_MONTH_SIZE,
+    },
+    arrow: {
+      fontSize: ARROW_SIZE,
+      lineHeight: 1,
+      transform: "translateY(-2px)",
+    },
+    centerYM: {
+      fontSize: CENTER_YM_SIZE,
+      fontWeight: CENTER_YM_WEIGHT,
+    },
+    todoOneLineCenter: {
+  position: "absolute",
+  left: 6,
+  right: 6,
+  top: "50%",
+  transform: "translateY(-40%)", // 日付と被らないよう少し上
+  textAlign: "center",
+  fontSize: 12,
+  lineHeight: 1.3,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+},
+    navPrevOffset: { transform: "translate(250px, 8px)" },
+    navCenterOffset: { transform: "translate(430px, -6px)" },
     navNextOffset: { transform: "translate(600px, 8px)" },
-  };
+  }; // ← ここを必ず閉じる！
 
   const week = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
@@ -242,73 +352,111 @@ export default function CalendarTodo() {
   })();
 
   return (
-    <div style={styles.wrap}>
-      <div style={styles.shift}>
-        <div style={styles.box}>
-          <div style={styles.title}>ToDoカレンダー</div>
+    <>
+      <div style={styles.wrap}>
+        <div style={styles.shift}>
+          <div style={styles.box}>
+            <div style={styles.title}>ToDoカレンダー</div>
 
-          {/* 曜日ヘッダ */}
-          <div style={styles.weekHead}>
-            {week.map((w) => (
-              <div key={w} style={styles.weekCell}>
-                {w}
-              </div>
-            ))}
-          </div>
-
-          {/* 本体グリッド（7×6） */}
-          <div style={styles.grid}>
-            {cells.map(({ date, inMonth }) => {
-              const key = ymd(date);
-              const list = todos[key] ?? [];
-              return (
-                <div
-                  key={key}
-                  style={{ ...styles.cell, ...(inMonth ? {} : styles.outCell) }}
-                  onClick={() => editDay(date)}
-                  title="クリックでこの日のToDoを編集"
-                >
-                  <div style={styles.dateNum}>{date.getDate()}</div>
-                  {list.length > 0 && (
-                    <div style={styles.todoList}>
-                      {list.slice(0, 3).map((t, i) => (
-                        <div key={i} style={styles.todoItem}>
-                          {t}
-                        </div>
-                      ))}
-                      {list.length > 3 && (
-                        <div style={{ ...styles.todoItem, opacity: 0.6 }}>
-                          +{list.length - 3} more
-                        </div>
-                      )}
-                    </div>
-                  )}
+            {/* 曜日ヘッダ */}
+            <div style={styles.weekHead}>
+              {week.map((w) => (
+                <div key={w} style={styles.weekCell}>
+                  {w}
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
 
-          {/* 下部ナビゲーション（前月/翌月） */}
-          <div style={styles.navRow}>
-  {/* 左：前月 */}
-  <div style={{ ...styles.navBtn, ...styles.navPrevOffset }} onClick={prev}>
-    <div style={styles.navTxt}>{prevMonthText}</div>
-    <div style={styles.arrow} aria-hidden>←</div>
-  </div>
+            {/* 本体グリッド（7×6） */}
+            <div style={styles.grid}>
+              {cells.map(({ date, inMonth }) => {
+  const key = ymd(date);
+  const list = todos[key] ?? [];
 
-  {/* 中央：年月（サイズ指定を centerYM に） */}
-  <div style={{ ...styles.centerYM, ...styles.navCenterOffset }}>
-    {viewYear} / {titleMonth}
-  </div>
+  // ★ ここを追加（IIFEをやめて先に判定）
+  const first = list[0] ?? "";
+  const totalChars = list.join("").length;
+  const isLong = first.length >= 8 || totalChars >= 20;
 
-  {/* 右：翌月 */}
-  <div style={{ ...styles.navBtn, ...styles.navNextOffset }} onClick={next}>
-    <div style={styles.navTxt}>{nextMonthText}</div>
-    <div style={styles.arrow} aria-hidden>→</div>
-  </div>
-</div>
+  return (
+    <div
+      key={key}
+      style={{ ...styles.cell, ...(inMonth ? {} : styles.outCell) }}
+      onClick={() => editDay(date)}
+      title="クリックでこの日のToDoを編集"
+    >
+      <div style={styles.dateNum}>{date.getDate()}</div>
+
+      {/* ★ ここを三項演算子に置き換え */}
+      {list.length > 0 &&
+  (isLong ? (
+    // ★ 長文：中央1行省略（上限でカット）
+    <div style={styles.todoOneLineCenter} title={first}>
+      {clip(first, LONG_LINE_MAX)}
+    </div>
+  ) : (
+    // ★ 短文：従来のリスト（各行を上限でカット）
+    <div style={styles.todoList}>
+      {list.slice(0, 3).map((t, i) => (
+        <div key={i} style={styles.todoItem} title={t}>
+          {clip(t, ITEM_LINE_MAX)}
         </div>
-      </div>
+      ))}
+      {list.length > 3 && (
+        <div style={{ ...styles.todoItem, opacity: 0.6 }}>
+          +{list.length - 3} more
+        </div>
+      )}
+    </div>
+))}
     </div>
   );
-}
+})}
+            </div>
+
+            {/* 下部ナビゲーション（前月/翌月） */}
+            <div style={styles.navRow}>
+              {/* 左：前月 */}
+              <div style={{ ...styles.navBtn, ...styles.navPrevOffset }} onClick={prev}>
+                <div style={styles.navTxt}>{prevMonthText}</div>
+                <div style={styles.arrow} aria-hidden>
+                  ←
+                </div>
+              </div>
+
+              {/* 中央：年月 */}
+              <div style={{ ...styles.centerYM, ...styles.navCenterOffset }}>
+                {viewYear} / {titleMonth}
+              </div>
+
+              {/* 右：翌月 */}
+              <div style={{ ...styles.navBtn, ...styles.navNextOffset }} onClick={next}>
+                <div style={styles.navTxt}>{nextMonthText}</div>
+                <div style={styles.arrow} aria-hidden>
+                  →
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ▼ モーダル */}
+      <TodoModal
+        open={modalOpen}
+        dateText={modalDate ? ymd(modalDate) : ""}
+        initialText={modalInitial}
+        showDelete={modalShowDelete}          // ★追加
+        onDelete={handleDeleteModal}
+        onSave={handleSaveModal}
+        onClose={() => setModalOpen(false)}
+      />
+      <ErrorModal
+        open={errOpen}
+        message={errMsg}
+        onClose={() => setErrOpen(false)}
+        onRetry={errRetry ?? undefined}
+      />
+    </>
+  );
+} // ← コンポーネントの”最後の”波カッコを忘れずに！

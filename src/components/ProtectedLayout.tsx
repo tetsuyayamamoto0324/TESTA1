@@ -5,6 +5,8 @@ import HeaderBar from "./HeaderBar";
 import BottomTabs from "./BottomTabs";
 import { useCity } from "@/store/city";
 
+const HEADER_H = "clamp(64px, 9vh, 96px)"; // ヘッダーの見込み高さ
+
 export default function ProtectedLayout() {
   // 共通ストア：未設定なら「東京都」が入っています
   const city = useCity((s) => s.city);

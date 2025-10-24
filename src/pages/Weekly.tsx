@@ -5,9 +5,9 @@ import { fetchDailyFromForecast } from "@/lib/openweather";
 const enWeek = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 const CARD_W = 250;
 const PAGE_SHIFT = 730;
-const GRID_SHIFT_Y = -24;
+const GRID_SHIFT_Y = 50;
 const TITLE_SHIFT_X = 855; // 右へ（左へは負の値）
-const TITLE_SHIFT_Y = -19;
+const TITLE_SHIFT_Y = 40;
 
 type Day = {
   dt: number;

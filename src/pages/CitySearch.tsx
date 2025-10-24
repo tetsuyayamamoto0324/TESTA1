@@ -14,7 +14,7 @@ function hasCountry(raw: string) {
 
 // 右寄せなどの見た目微調整（必要に応じて値を変えてください）
 const PAGE_SHIFT_X = 710;   // ページ全体を右へ
-const PAGE_SHIFT_Y = -6;    // 上下の位置
+const PAGE_SHIFT_Y = 150;    // 上下の位置
 const BOX_W = 420;          // 入力ボックス領域の見た目幅
 
 // 保存キー
