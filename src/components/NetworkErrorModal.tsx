@@ -1,5 +1,3 @@
-import React from "react";
-
 type Props = {
   open: boolean;
   onClose?: () => void;     // 任意。閉じれても、オフライン中は再表示されます

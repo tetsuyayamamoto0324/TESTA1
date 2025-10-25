@@ -1,6 +1,4 @@
 // src/components/OutfitSimple.tsx
-import React from "react";
-
 type ImageMap = {
   coat?: string;      // ≤10℃
   long?: string;      // 11–19℃

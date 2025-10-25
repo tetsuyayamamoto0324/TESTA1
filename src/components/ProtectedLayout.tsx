@@ -1,5 +1,4 @@
 // src/components/ProtectedLayout.tsx
-import React from "react";
 import { Outlet, useNavigate } from "react-router-dom";
 import HeaderBar from "./HeaderBar";
 import BottomTabs from "./BottomTabs";

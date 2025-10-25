@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import ErrorModal from "@/components/ErrorModal";
 import NetworkErrorModal from "@/components/NetworkErrorModal";
 import { AppError, AppErrorKind, normalizeError, messageFor } from "@/lib/appError";

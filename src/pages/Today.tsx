@@ -7,6 +7,8 @@ import { jstYmd } from "@/lib/date-jst";
 import QuoteOfTheDay from "@/components/QuoteOfTheDay";
 import OutfitSimple from "@/components/OutfitSimple";
 import s from "./Today.module.css";
+import type * as React from "react";
+import { useError } from "@/contexts/ErrorContext";
 
 type State = {
   name?: string;
@@ -28,6 +30,7 @@ type SavedCity = {
 
 export default function Today() {
   const [state, setState] = useState<State>({ loading: true });
+  const showError = useError();
 
   // localStorage から都市設定（なければ東京都(35.6895, 139.6917)）
   const saved: SavedCity = useMemo(() => {
@@ -44,6 +47,7 @@ export default function Today() {
 
   // 天気再取得（HeaderBar の「再取得」から呼ばれる）
   const refetchWeather = useCallback(async () => {
+    try { 
     const [cur, pop] = await Promise.all([
       fetchCurrentByCoords(lat, lon),
       fetchTodayMaxPop(lat, lon),
@@ -57,7 +61,11 @@ export default function Today() {
       loading: false,
       error: undefined,
     });
-  }, [lat, lon, cityName]);
+  } catch (e) {
+    showError(e, { retry: refetchWeather });
+    setState((s) => ({ ...s, loading: false, error: undefined }));
+    }
+  }, [lat, lon, cityName, showError]);
 
   // 初回ロード
   useEffect(() => {
@@ -65,14 +73,11 @@ export default function Today() {
       try {
         await refetchWeather();
       } catch (e: any) {
-        setState((s) => ({
-          ...s,
-          loading: false,
-          error: e?.message || String(e),
-        }));
+        showError(e, { retry: refetchWeather });
+        setState((s) => ({ ...s, loading: false, error: undefined }));
       }
     })();
-  }, [refetchWeather]);
+  }, [refetchWeather, showError]);
 
   if (state.loading) return <div style={{ padding: 16 }}>読み込み中…</div>;
   if (state.error) return <div style={{ padding: 16, color: "#e03131" }}>{state.error}</div>;

@@ -1,6 +1,4 @@
 // src/components/QuoteOfTheDay.tsx
-import React from "react";
-
 function hash32(str: string): number {
   let h = 5381;
   for (let i = 0; i < str.length; i++) { h = ((h << 5) + h) + str.charCodeAt(i); h |= 0; }

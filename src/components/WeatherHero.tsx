@@ -1,5 +1,3 @@
-import React from "react";
-
 type Props = {
   tempC?: number | null;
   iconCode?: string | null;
