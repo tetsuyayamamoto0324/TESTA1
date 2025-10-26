@@ -4,8 +4,10 @@ import { supabase } from "../../lib/supabase";
 import { z } from "zod";
 import { Alert, Title, Stack } from "@mantine/core";
 import { useForm, zodResolver } from "@mantine/form";
-import { useNavigate, Link, useLocation } from "react-router-dom"; // ★ 追加
+import { useNavigate, Link, useLocation } from "react-router-dom";
 import { useAuth } from "../../store/auth";
+import { useError } from "@/contexts/ErrorContext"; // 修正: 追加
+import { normalizeError, messageFor } from "@/lib/appError"; // 修正: 追加
 
 const schema = z.object({
   email: z.string().min(1, "メールは必須です").email("メール形式が不正です"),
@@ -15,10 +17,11 @@ type FormValues = z.infer<typeof schema>;
 
 export default function Login() {
   const navigate = useNavigate();
-  const location = useLocation(); // ★ 追加
+  const location = useLocation();
   const { setUser } = useAuth();
   const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false); // ★ 追加
+  const [submitting, setSubmitting] = useState(false);
+  const showError = useError(); // 修正: 追加
 
   const form = useForm<FormValues>({
     initialValues: { email: "", password: "" },
@@ -45,22 +48,39 @@ export default function Login() {
   const onSubmit = form.onSubmit(async (values) => {
     setError(null);
     setSubmitting(true);
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: values.email,
-      password: values.password,
-    });
-    console.log("Supabase auth result:", { data, error });
-    setSubmitting(false);
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: values.email,
+        password: values.password,
+      });
+      console.log("Supabase auth result:", { data, error });
 
-    if (error) {
-      setError(error.message);
-      return;
-    }
-    if (data.user) {
-      setUser({ id: data.user.id, email: data.user.email });
-      // ★ 直前のアクセス先へ戻す（なければ /today）
-      const to = (location.state as any)?.from?.pathname ?? "/today";
-      navigate(to, { replace: true });
+      if (error) {
+        // グローバルモーダルも出す
+        const appErr = normalizeError(error); // 修正
+        showError(appErr, {
+          title: "ログインに失敗しました", // 修正
+          fallbackMessage: messageFor(appErr.kind, appErr.message), // 修正
+        });
+        setError(error.message); // 画面内のAlertも残す場合
+        return;
+      }
+
+      if (data.user) {
+        setUser({ id: data.user.id, email: data.user.email });
+        const to = (location.state as any)?.from?.pathname ?? "/today";
+        navigate(to, { replace: true });
+      }
+    } catch (e) {
+      // fetch失敗など
+      const appErr = normalizeError(e); // 修正
+      showError(appErr, {
+        title: "ログインに失敗しました", // 修正
+        fallbackMessage: messageFor(appErr.kind, appErr.message), // 修正
+      });
+      setError(appErr.message);
+    } finally {
+      setSubmitting(false);
     }
   });
 
@@ -89,7 +109,6 @@ export default function Login() {
           </Alert>
         )}
 
-        {/* ★ ボタンを含め、すべて form の中に入れる */}
         <form onSubmit={onSubmit} style={{ maxWidth: 520, margin: "0 auto" }}>
           <Stack gap={24}>
             <div
@@ -146,7 +165,6 @@ export default function Login() {
               />
             </div>
 
-            {/* 送信ボタン（フォーム内） */}
             <button
               type="submit"
               disabled={submitting}
@@ -162,7 +180,6 @@ export default function Login() {
           </Stack>
         </form>
 
-        {/* 新規登録へ（同じ見た目） */}
         <div style={{ marginTop: 28 }}>
           <Link to="/signup" style={linkBtnStyle}>
             <span style={linkLabelStyle}>新規登録へ</span>

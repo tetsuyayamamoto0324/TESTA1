@@ -24,13 +24,13 @@ export function normalizeError(e: unknown): AppError {
   const status: number | undefined = any?.status;
 
   if (any?.name === "TypeError" && /fetch/i.test(any?.message ?? "")) {
-    return new AppError("NETWORK", "通信に失敗しました。", e);
+    return new AppError("NETWORK", "（WLP-AUTHー201）。", e);
   }
   if (typeof status === "number" && status === 0) {
-    return new AppError("NETWORK", "通信に失敗しました。", e);
+    return new AppError("NETWORK", "（WLP-AUTHー201）", e);
   }
   if (status === 409 || /already registered|email.*exists/i.test(msg ?? "")) {
-    return new AppError("EMAIL_EXISTS", "このメールアドレスは既に登録されています。", e);
+    return new AppError("EMAIL_EXISTS", "（WLP-AUTHー301）", e);
   }
   if (status === 400 || status === 401) {
     return new AppError("AUTH_FAIL", msg ?? "認証に失敗しました。", e);
@@ -43,12 +43,10 @@ export function normalizeError(e: unknown): AppError {
 
 export function messageFor(kind: AppErrorKind, fallback?: string) {
   switch (kind) {
-    case "NETWORK":     return "通信できません。接続やブラウザ設定をご確認ください。";
-    case "SCHEMA":      return "入力の形式が正しくありません。内容をご確認ください。";
-    case "CREATE_FAIL": return "新規登録に失敗しました。時間をおいて再度お試しください。";
-    case "AUTH_FAIL":   return "認証に失敗しました。メール/パスワードをご確認ください。";
-    case "EMAIL_EXISTS":return "このメールアドレスは既に登録されています。ログインをご利用ください。";
-    case "API_FAIL":    return "データの取得に失敗しました。しばらくしてからお試しください。";
+    case "NETWORK":     return "通信できません。接続やブラウザ設定をご確認ください。(201)";
+    case "SCHEMA":      return "入力の形式が正しくありません。内容をご確認ください。(300)";
+    case "EMAIL_EXISTS":return "このメールアドレスは既に登録されています。ログインをご利用ください。(301)";
+    case "API_FAIL":    return "データの取得に失敗しました。しばらくしてからお試しください。(501)";
     default:            return fallback ?? "エラーが発生しました。";
   }
 }

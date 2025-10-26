@@ -5,6 +5,8 @@ import { z } from "zod";
 import { Alert, Title } from "@mantine/core";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../../store/auth";
+import { useError } from "@/contexts/ErrorContext"; // 修正: 追加
+import { normalizeError, messageFor } from "@/lib/appError"; // 修正: 追加
 
 const schema = z.object({
   email: z.string().min(1, "メールは必須です").email("メール形式が不正です"),
@@ -14,8 +16,8 @@ const schema = z.object({
 export default function Signup() {
   const navigate = useNavigate();
   const { setUser } = useAuth();
+  const showError = useError(); // 修正: 追加
 
-  // ← 連続入力が絶対に途切れないよう、単純な state に分解
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -26,7 +28,6 @@ export default function Signup() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 共通UIスタイル
   const linkBtnStyle: React.CSSProperties = {
     display: "block",
     width: "100%",
@@ -44,7 +45,6 @@ export default function Signup() {
     color: "#1f6fff",
   };
 
-  // 単純な onChange（イベントから値を即取り出す）
   const onChangeEmail = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = e.target.value;
     setEmail(v);
@@ -67,12 +67,16 @@ export default function Signup() {
     setSubmittedOnce(true);
     setError(null);
 
-    // 送信時にZodで一括検証
     const parsed = schema.safeParse({ email, password });
     if (!parsed.success) {
       const fe = parsed.error.flatten().fieldErrors;
       setEmailErr(fe.email?.[0] ?? null);
       setPasswordErr(fe.password?.[0] ?? null);
+      // バリデーションエラーもモーダルで通知したい場合（任意）
+      showError(new Error(fe.email?.[0] ?? fe.password?.[0] ?? "入力が不正です"), {
+        title: "入力が正しくありません",
+        fallbackMessage: "入力の形式が正しくありません。内容をご確認ください。",
+      }); // 修正（任意）
       return;
     }
     setEmailErr(null);
@@ -80,28 +84,35 @@ export default function Signup() {
 
     setSubmitting(true);
     try {
-      // サインアップ
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
       });
       if (signUpError) {
+        const appErr = normalizeError(signUpError); // 修正
+        showError(appErr, {
+          title: "このメールアドレスは登録済です。", // 修正
+          fallbackMessage: messageFor(appErr.kind, appErr.message), // 修正
+        });
         setError(signUpError.message);
         return;
       }
 
-      // Confirm OFF の場合はここでセッションができる
       if (signUpData?.session && signUpData.user) {
         setUser({ id: signUpData.user.id, email: signUpData.user.email });
         navigate("/");
         return;
       }
 
-      // 念のため自動サインイン（Confirm ON だとエラーになることあり）
       const { data: signInData, error: signInError } =
         await supabase.auth.signInWithPassword({ email, password });
 
       if (signInError) {
+        const appErr = normalizeError(signInError); // 修正
+        showError(appErr, {
+          title: "ログインに失敗しました", // 修正
+          fallbackMessage: messageFor(appErr.kind, appErr.message), // 修正
+        });
         setError(signInError.message);
         return;
       }
@@ -112,8 +123,16 @@ export default function Signup() {
       }
 
       setError("サインアップは成功しましたが、ログインできませんでした。");
+      showError(new Error("サインアップは成功しましたが、ログインできませんでした。"), {
+        title: "ログインできませんでした", // 修正
+      }); // 修正
     } catch (e: any) {
-      setError(e?.message ?? String(e));
+      const appErr = normalizeError(e); // 修正
+      showError(appErr, {
+        title: "このメールアドレスは登録済です。", // 修正
+        fallbackMessage: messageFor(appErr.kind, appErr.message), // 修正
+      });
+      setError(appErr.message);
     } finally {
       setSubmitting(false);
     }
@@ -210,7 +229,7 @@ export default function Signup() {
                 width: "100%",
                 border: "none",
                 outline: "none",
-                background: "transparent",
+                background: "透明",
                 fontSize: 16,
               }}
             />

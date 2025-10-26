@@ -8,7 +8,9 @@ import QuoteOfTheDay from "@/components/QuoteOfTheDay";
 import OutfitSimple from "@/components/OutfitSimple";
 import s from "./Today.module.css";
 import type * as React from "react";
-import { useError } from "@/contexts/ErrorContext";
+import { useError } from "@/contexts/ErrorContext"; // 追記
+import { z } from "zod"; // 追記
+import { validateResponseOrShow } from "@/lib/validate"; // 追記
 
 type State = {
   name?: string;
@@ -28,9 +30,24 @@ type SavedCity = {
   lon: number;
 } | null;
 
+// OpenWeather 受信スキーマ（実際に使う最小限） // 追記
+const CurrentSchema = z.object({
+  name: z.string().optional(),
+  main: z.object({ temp: z.number().nullable().optional() }).optional(),
+  weather: z
+    .array(
+      z.object({
+        description: z.string().optional(),
+        icon: z.string().optional(),
+      })
+    )
+    .optional(),
+}); // 追記
+const MaxPopSchema = z.number().min(0).max(1); // 追記
+
 export default function Today() {
   const [state, setState] = useState<State>({ loading: true });
-  const showError = useError();
+  const showError = useError(); // 追記
 
   // localStorage から都市設定（なければ東京都(35.6895, 139.6917)）
   const saved: SavedCity = useMemo(() => {
@@ -47,25 +64,55 @@ export default function Today() {
 
   // 天気再取得（HeaderBar の「再取得」から呼ばれる）
   const refetchWeather = useCallback(async () => {
-    try { 
-    const [cur, pop] = await Promise.all([
-      fetchCurrentByCoords(lat, lon),
-      fetchTodayMaxPop(lat, lon),
-    ]);
-    setState({
-      name: cur.name || cityName,
-      temp: cur.main?.temp,
-      desc: cur.weather?.[0]?.description ?? "",
-      icon: cur.weather?.[0]?.icon ?? "01d",
-      pop,
-      loading: false,
-      error: undefined,
-    });
-  } catch (e) {
-    showError(e, { retry: refetchWeather });
-    setState((s) => ({ ...s, loading: false, error: undefined }));
+    try {
+      const [curRaw, popRaw] = await Promise.all([
+        fetchCurrentByCoords(lat, lon),
+        fetchTodayMaxPop(lat, lon),
+      ]); // 修正
+
+      // スキーマ検証（NGならここでモーダル） // 追記
+      const curChk = validateResponseOrShow({
+        schema: CurrentSchema,
+        data: curRaw,
+        showError,
+        title: "データの読み取りに失敗しました", // 追記
+        code: "300", // 追記
+      }); // 追記
+      if (!curChk.ok) {
+        setState((s) => ({ ...s, loading: false })); // 追記
+        return; // 追記
+      }
+
+      const popChk = validateResponseOrShow({
+        schema: MaxPopSchema,
+        data: popRaw,
+        showError,
+        title: "降水確率データの読み取りに失敗しました", // 追記
+        code: "301", // 追記
+      }); // 追記
+      if (!popChk.ok) {
+        setState((s) => ({ ...s, loading: false })); // 追記
+        return; // 追記
+      }
+
+      const cur = curChk.data; // 追記
+      const pop = popChk.data; // 追記
+
+      setState({
+        name: cur.name || cityName,
+        temp: cur.main?.temp ?? undefined,
+        desc: cur.weather?.[0]?.description ?? "",
+        icon: cur.weather?.[0]?.icon ?? "01d",
+        pop,
+        loading: false,
+        error: undefined,
+      }); // 修正
+    } catch (e) {
+      // 通信エラー等はここで共通モーダル表示（NETWORK は専用モーダルへ） // 追記
+      showError(e, { retry: refetchWeather }); // 修正
+      setState((s) => ({ ...s, loading: false, error: undefined })); // 修正
     }
-  }, [lat, lon, cityName, showError]);
+  }, [lat, lon, cityName, showError]); // 修正
 
   // 初回ロード
   useEffect(() => {
@@ -73,11 +120,11 @@ export default function Today() {
       try {
         await refetchWeather();
       } catch (e: any) {
-        showError(e, { retry: refetchWeather });
-        setState((s) => ({ ...s, loading: false, error: undefined }));
+        showError(e, { retry: refetchWeather }); // 修正
+        setState((s) => ({ ...s, loading: false, error: undefined })); // 修正
       }
     })();
-  }, [refetchWeather, showError]);
+  }, [refetchWeather, showError]); // 修正
 
   if (state.loading) return <div style={{ padding: 16 }}>読み込み中…</div>;
   if (state.error) return <div style={{ padding: 16, color: "#e03131" }}>{state.error}</div>;

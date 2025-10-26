@@ -1,7 +1,9 @@
 // src/pages/Weekly.tsx
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { fetchDailyFromForecast } from "@/lib/openweather";
 import { useError } from "@/contexts/ErrorContext";
+import { z } from "zod"; // 追記
+import { validateResponseOrShow } from "@/lib/validate"; // 追記
 
 const enWeek = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 const CARD_W = 250;
@@ -37,27 +39,27 @@ function DayCard({ d }: { d: Day }) {
       flexDirection: "column",
       alignItems: "center",
       justifyContent: "space-between",
-      padding: "18px 14px",                 // ← 少し広めに
+      padding: "18px 14px",
       boxShadow: "0 2px 4px rgba(0,0,0,.05)",
     },
     week: {
       fontWeight: 900,
       letterSpacing: ".6px",
-      fontSize: "clamp(16px, 2vw, 22px)",  // ← 曜日を大きく
+      fontSize: "clamp(16px, 2vw, 22px)",
     },
     icon: {
-      width: "clamp(72px, 9vw, 96px)",     // ← アイコン拡大（54→72〜96）
+      width: "clamp(72px, 9vw, 96px)",
       height: "auto",
       imageRendering: "pixelated",
     },
     temp: {
-      fontSize: "clamp(20px, 2.8vw, 28px)", // ← 気温を大きく
+      fontSize: "clamp(20px, 2.8vw, 28px)",
       fontWeight: 800,
       lineHeight: 1.25,
       textAlign: "center",
     },
     pop: {
-      fontSize: "clamp(14px, 2vw, 18px)",   // ← 降水も見やすく
+      fontSize: "clamp(14px, 2vw, 18px)",
       fontWeight: 700,
       marginTop: 4,
     },
@@ -81,54 +83,76 @@ function DayCard({ d }: { d: Day }) {
   );
 }
 
+// OpenWeather 週間の受信スキーマ（使う最小限） // 追記
+const DaySchema = z.object({
+  dt: z.number(),
+  temp: z.object({ min: z.number(), max: z.number() }),
+  pop: z.number().min(0).max(1).optional(),
+  weather: z.array(
+    z.object({
+      icon: z.string().optional(),
+      description: z.string().optional(),
+    })
+  ),
+}); // 追記
+const DailyListSchema = z.array(DaySchema); // 追記
+
 export default function Weekly() {
   const [days, setDays] = useState<Day[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const showError = useError();
-
-  const lat = 35.6895, lon = 139.6917;
-
-  const refetchWeekly = useCallback(async () => {
-    try { // 修正
-      const daily = await fetchDailyFromForecast(lat, lon);
-      setDays(daily as Day[]);
-      setError(null); // 修正: 画面内の赤字は使わないためクリア
-    } catch (e: any) { // 修正
-      showError(e, { retry: refetchWeekly }); // 修正: 共通モーダルへ
-      setError(null); // 修正
-    }
-  }, [lat, lon, showError]);
+  const showError = useError(); // 修正
 
   useEffect(() => {
-    refetchWeekly(); // 修正: 初回ロードで再取得
-  }, [refetchWeekly]);
+    const lat = 35.6895,
+      lon = 139.6917; // まずは固定
+    (async () => {
+      try {
+        const raw = await fetchDailyFromForecast(lat, lon); // 既存
+        const chk = validateResponseOrShow({
+          schema: DailyListSchema,
+          data: raw,
+          showError,
+          title: "週間予報の読み取りに失敗しました", // 追記
+          code: "WLP-DATA-2001", // 追記
+        }); // 追記
+        if (!chk.ok) {
+          setError("週間データの形式が不正です。"); // 追記
+          return; // 追記
+        }
+        setDays(chk.data as Day[]); // 修正
+      } catch (e: any) {
+        showError(e, { retry: () => {} }); // 修正（必要なら再取得関数を渡す）
+        setError(e?.message ?? String(e)); // 既存
+      }
+    })();
+  }, [showError]); // 修正
 
   if (!days && !error) return <div style={{ padding: 16 }}>読み込み中…</div>;
   if (error) return <div style={{ padding: 16, color: "#e03131" }}>{error}</div>;
 
-const styles: Record<string, React.CSSProperties> = {
-  wrap: {
-    maxWidth: 1200,
-    margin: "0 auto",
-    padding: "16px clamp(12px, 2vw, 20px) 80px",
-  },
-  title: {
-    fontSize: "clamp(18px, 3.6vw, 28px)",
-    fontWeight: 800,
-    margin: "12px 0 16px",
-    transform: `translate(${TITLE_SHIFT_X}px, ${TITLE_SHIFT_Y}px)`, // 右へ
-  },
-  grid: {
-    width: "100%",
-    display: "grid",
-    gridTemplateColumns: `repeat(3, ${CARD_W}px)`, // ← カード幅で3列
-    columnGap: 300,   // 横方向の間隔
-    rowGap: 15,
-    justifyContent: "center",
-    justifyItems: "center",
-    transform: `translate(${PAGE_SHIFT}px, ${GRID_SHIFT_Y}px)`,
-  },
-};
+  const styles: Record<string, React.CSSProperties> = {
+    wrap: {
+      maxWidth: 1200,
+      margin: "0 auto",
+      padding: "16px clamp(12px, 2vw, 20px) 80px",
+    },
+    title: {
+      fontSize: "clamp(18px, 3.6vw, 28px)",
+      fontWeight: 800,
+      margin: "12px 0 16px",
+      transform: `translate(${TITLE_SHIFT_X}px, ${TITLE_SHIFT_Y}px)`, // 右へ
+    },
+    grid: {
+      width: "100%",
+      display: "grid",
+      gridTemplateColumns: `repeat(3, ${CARD_W}px)`, // ← カード幅で3列
+      columnGap: 300, // 横方向の間隔
+      rowGap: 15,
+      justifyContent: "center",
+      justifyItems: "center",
+      transform: `translate(${PAGE_SHIFT}px, ${GRID_SHIFT_Y}px)`,
+    },
+  };
 
   return (
     <div style={styles.wrap}>

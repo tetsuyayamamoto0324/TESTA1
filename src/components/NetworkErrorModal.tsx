@@ -61,11 +61,11 @@ export default function NetworkErrorModal({ open }: Props) { // 修正
       >
         <div style={styles.head}>
           <div style={styles.badge}>!</div>
-          <div style={styles.title}>通信できません</div>
+          <div style={styles.title}>オフラインです</div>
         </div>
         <div style={styles.msg}>
           ネットワークに接続できません。回線・Wi-Fi をご確認ください。<br />
-          復旧すると自動で閉じます。
+          復旧すると自動で閉じます。（201）
         </div>
         <div style={styles.tip}>
           それでもダメな場合：ブラウザの拡張機能やプロキシ、VPN、企業ネットワークの制限をご確認ください。
