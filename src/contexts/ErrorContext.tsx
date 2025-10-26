@@ -1,3 +1,4 @@
+// src/contexts/ErrorContext.tsx
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import ErrorModal from "@/components/ErrorModal";
 import NetworkErrorModal from "@/components/NetworkErrorModal";
@@ -20,12 +21,15 @@ export function ErrorProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const onOffline = () => setNetOpen(true);
-    const onOnline  = () => setNetOpen(false);
+    const onOnline = () => setNetOpen(false);
 
     window.addEventListener("offline", onOffline);
     window.addEventListener("online", onOnline);
+
     // 初期状態がすでにオフラインなら即表示
-    if (typeof navigator !== "undefined" && navigator.onLine === false) setNetOpen(true);
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      setNetOpen(true); // 修正
+    }
 
     return () => {
       window.removeEventListener("offline", onOffline);
@@ -36,8 +40,8 @@ export function ErrorProvider({ children }: { children: ReactNode }) {
   const showError: ShowError = (err, opts) => {
     const appErr = normalizeError(err);
     if (appErr.kind === "NETWORK") {
-      // 通信失敗はネットワーク専用モーダルでキャッチ
-      setNetOpen(true);
+      // 通信失敗はネットワーク専用モーダルでハンドリング
+      setNetOpen(true); // 修正: 毎回ここで確実に開く
       return;
     }
     setKind(appErr.kind);
@@ -51,8 +55,8 @@ export function ErrorProvider({ children }: { children: ReactNode }) {
     <Ctx.Provider value={showError}>
       {children}
 
-      {/* ネットワーク専用（常に最優先） */}
-      <NetworkErrorModal open={netOpen} onClose={() => setNetOpen(false)} />
+      {/* ネットワーク専用（常に最優先）。閉じる手段は提供しない。 */} {/* 修正 */}
+      <NetworkErrorModal open={netOpen} /> {/* 修正: onClose を渡さない */}
 
       {/* 通常のエラーモーダル（ネットワーク以外） */}
       <ErrorModal

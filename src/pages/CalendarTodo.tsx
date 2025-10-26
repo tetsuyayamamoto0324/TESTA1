@@ -1,9 +1,12 @@
+// src/pages/CalendarTodo.tsx
 import React, { useMemo, useState } from "react";
 import TodoModal from "@/components/TodoModal";
-import ErrorModal from "@/components/ErrorModal";
-import { AppError, normalizeError, messageFor } from "@/lib/appError";
+// import ErrorModal from "@/components/ErrorModal"; // 修正: 共通モーダル（ErrorProvider）に統一するため未使用
+// import { AppError, normalizeError, messageFor } from "@/lib/appError"; // 修正: 未使用の import を削除
+import { AppError } from "@/lib/appError"; // 修正: 必要な型だけ残す
 import { z } from "zod";
 import { supabase } from "@/lib/supabase"; // 例
+import { useError } from "@/contexts/ErrorContext"; // 修正: 共通モーダルを使う
 
 const clip = (text: string, max: number) => {
   // Array.from でコードポイント分割（サロゲート対策）
@@ -74,76 +77,9 @@ export default function CalendarTodo() {
   const [modalDate, setModalDate] = useState<Date | null>(null);
   const [modalInitial, setModalInitial] = useState("");
   const [modalShowDelete, setModalShowDelete] = useState(false);
-  const [errOpen, setErrOpen] = useState(false);
-  const [errMsg, setErrMsg] = useState("");
-  const [errRetry, setErrRetry] = useState<null | (() => void)>(null);
-  const showError = (e: unknown, retry?: () => void) => {
-  const appErr = normalizeError(e);
-  setErrMsg(messageFor(appErr.kind, appErr.message));
-  setErrRetry(retry ?? null);
-  setErrOpen(true);
-};
 
-async function fetchSomething() {
-  try {
-    const res = await fetch("/api/data");
-    if (!res.ok) {
-      throw { status: res.status, message: await res.text() }; // normalizeErrorが拾う
-    }
-    return await res.json();
-  } catch (e) {
-    showError(e, () => fetchSomething()); // 再試行つき
-  }
-}
+  const showError = useError(); // 修正: ローカルモーダルではなく共通モーダルを使用
 
-// 例2) 新規登録（CREATE_FAIL）
-// スキーマは Zod で検証する例
-const NewTodo = z.object({
-  title: z.string().min(1).max(200),
-  date: z.string(), // 例: "2025-01-01"
-});
-
-async function createTodo(input: unknown) {
-  // スキーマ検証
-  const parsed = NewTodo.safeParse(input);
-  if (!parsed.success) {
-    showError(new AppError("SCHEMA", parsed.error.issues.map(i => i.message).join("\n")));
-    return;
-  }
-
-  try {
-    const res = await fetch("/api/todos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(parsed.data),
-    });
-    if (!res.ok) {
-      throw new AppError("CREATE_FAIL", `作成失敗（${res.status}）`);
-    }
-    // 成功処理...
-  } catch (e) {
-    showError(e, () => createTodo(input));
-  }
-}
-
-async function signUp(email: string, password: string) {
-  try {
-    const { error } = await supabase.auth.signUp({ email, password });
-    if (error) throw error; // normalizeError が EMAIL_EXISTS / AUTH_FAIL を判定
-    // 成功処理...
-  } catch (e) {
-    showError(e, () => signUp(email, password));
-  }
-}
-
-async function signIn(email: string, password: string) {
-  try {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error; // -> AUTH_FAIL
-  } catch (e) {
-    showError(e, () => signIn(email, password));
-  }
-}
   const cells = useMemo(
     () => buildMonthMatrix(viewYear, viewMonth),
     [viewYear, viewMonth]
@@ -173,19 +109,20 @@ async function signIn(email: string, password: string) {
     setModalShowDelete(cur.length > 0);
     setModalOpen(true);
   };
+
   const handleDeleteModal = () => {
-  if (!modalDate) return;
-  const key = ymd(modalDate);
+    if (!modalDate) return;
+    const key = ymd(modalDate);
 
-  const nextTodos: TodoMap = { ...todos };
-  delete nextTodos[key];
+    const nextTodos: TodoMap = { ...todos };
+    delete nextTodos[key];
 
-  setTodos(nextTodos);
-  saveTodos(nextTodos);
+    setTodos(nextTodos);
+    saveTodos(nextTodos);
 
-  setModalOpen(false);
-  setModalDate(null);
-};
+    setModalOpen(false);
+    setModalDate(null);
+  };
 
   // ▼ モーダル保存
   const handleSaveModal = (text: string) => {
@@ -323,18 +260,18 @@ async function signIn(email: string, password: string) {
       fontWeight: CENTER_YM_WEIGHT,
     },
     todoOneLineCenter: {
-  position: "absolute",
-  left: 6,
-  right: 6,
-  top: "50%",
-  transform: "translateY(-40%)", // 日付と被らないよう少し上
-  textAlign: "center",
-  fontSize: 12,
-  lineHeight: 1.3,
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-},
+      position: "absolute",
+      left: 6,
+      right: 6,
+      top: "50%",
+      transform: "translateY(-40%)", // 日付と被らないよう少し上
+      textAlign: "center",
+      fontSize: 12,
+      lineHeight: 1.3,
+      whiteSpace: "nowrap",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+    },
     navPrevOffset: { transform: "translate(250px, 8px)" },
     navCenterOffset: { transform: "translate(430px, -6px)" },
     navNextOffset: { transform: "translate(600px, 8px)" },
@@ -350,6 +287,68 @@ async function signIn(email: string, password: string) {
     const m = new Date(viewYear, viewMonth + 1, 1);
     return `${m.getMonth() + 1}月`;
   })();
+
+  // ▼ 以下の通信系ユーティリティを共通モーダルでラップ（例）
+  async function fetchSomething() {
+    try {
+      const res = await fetch("/api/data");
+      if (!res.ok) {
+        throw { status: res.status, message: await res.text() }; // normalizeErrorが拾う（ErrorProvider 側）
+      }
+      return await res.json();
+    } catch (e) {
+      showError(e, () => fetchSomething()); // 修正: 共通モーダル & 再試行
+    }
+  }
+
+  // 例2) 新規登録（CREATE_FAIL）
+  // スキーマは Zod で検証する例
+  const NewTodo = z.object({
+    title: z.string().min(1).max(200),
+    date: z.string(), // 例: "2025-01-01"
+  });
+
+  async function createTodo(input: unknown) {
+    // スキーマ検証
+    const parsed = NewTodo.safeParse(input);
+    if (!parsed.success) {
+      showError(new AppError("SCHEMA", parsed.error.issues.map(i => i.message).join("\n"))); // 修正
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/todos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsed.data),
+      });
+      if (!res.ok) {
+        throw new AppError("CREATE_FAIL", `作成失敗（${res.status}）`);
+      }
+      // 成功処理...
+    } catch (e) {
+      showError(e, () => createTodo(input)); // 修正
+    }
+  }
+
+  async function signUp(email: string, password: string) {
+    try {
+      const { error } = await supabase.auth.signUp({ email, password });
+      if (error) throw error; // normalizeError は ErrorProvider 内で判定
+      // 成功処理...
+    } catch (e) {
+      showError(e, () => signUp(email, password)); // 修正
+    }
+  }
+
+  async function signIn(email: string, password: string) {
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error; // -> AUTH_FAIL
+    } catch (e) {
+      showError(e, () => signIn(email, password)); // 修正
+    }
+  }
 
   return (
     <>
@@ -370,48 +369,48 @@ async function signIn(email: string, password: string) {
             {/* 本体グリッド（7×6） */}
             <div style={styles.grid}>
               {cells.map(({ date, inMonth }) => {
-  const key = ymd(date);
-  const list = todos[key] ?? [];
+                const key = ymd(date);
+                const list = todos[key] ?? [];
 
-  // ★ ここを追加（IIFEをやめて先に判定）
-  const first = list[0] ?? "";
-  const totalChars = list.join("").length;
-  const isLong = first.length >= 8 || totalChars >= 20;
+                // ★ IIFEをやめて先に判定（読みやすさ向上）
+                const first = list[0] ?? "";
+                const totalChars = list.join("").length;
+                const isLong = first.length >= 8 || totalChars >= 20;
 
-  return (
-    <div
-      key={key}
-      style={{ ...styles.cell, ...(inMonth ? {} : styles.outCell) }}
-      onClick={() => editDay(date)}
-      title="クリックでこの日のToDoを編集"
-    >
-      <div style={styles.dateNum}>{date.getDate()}</div>
+                return (
+                  <div
+                    key={key}
+                    style={{ ...styles.cell, ...(inMonth ? {} : styles.outCell) }}
+                    onClick={() => editDay(date)}
+                    title="クリックでこの日のToDoを編集"
+                  >
+                    <div style={styles.dateNum}>{date.getDate()}</div>
 
-      {/* ★ ここを三項演算子に置き換え */}
-      {list.length > 0 &&
-  (isLong ? (
-    // ★ 長文：中央1行省略（上限でカット）
-    <div style={styles.todoOneLineCenter} title={first}>
-      {clip(first, LONG_LINE_MAX)}
-    </div>
-  ) : (
-    // ★ 短文：従来のリスト（各行を上限でカット）
-    <div style={styles.todoList}>
-      {list.slice(0, 3).map((t, i) => (
-        <div key={i} style={styles.todoItem} title={t}>
-          {clip(t, ITEM_LINE_MAX)}
-        </div>
-      ))}
-      {list.length > 3 && (
-        <div style={{ ...styles.todoItem, opacity: 0.6 }}>
-          +{list.length - 3} more
-        </div>
-      )}
-    </div>
-))}
-    </div>
-  );
-})}
+                    {/* ★ 三項演算子で分岐 */}
+                    {list.length > 0 &&
+                      (isLong ? (
+                        // ★ 長文：中央1行省略（上限でカット）
+                        <div style={styles.todoOneLineCenter} title={first}>
+                          {clip(first, LONG_LINE_MAX)}
+                        </div>
+                      ) : (
+                        // ★ 短文：従来のリスト（各行を上限でカット）
+                        <div style={styles.todoList}>
+                          {list.slice(0, 3).map((t, i) => (
+                            <div key={i} style={styles.todoItem} title={t}>
+                              {clip(t, ITEM_LINE_MAX)}
+                            </div>
+                          ))}
+                          {list.length > 3 && (
+                            <div style={{ ...styles.todoItem, opacity: 0.6 }}>
+                              +{list.length - 3} more
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                  </div>
+                );
+              })}
             </div>
 
             {/* 下部ナビゲーション（前月/翌月） */}
@@ -446,17 +445,11 @@ async function signIn(email: string, password: string) {
         open={modalOpen}
         dateText={modalDate ? ymd(modalDate) : ""}
         initialText={modalInitial}
-        showDelete={modalShowDelete}          // ★追加
+        showDelete={modalShowDelete}          // ★既存維持
         onDelete={handleDeleteModal}
         onSave={handleSaveModal}
         onClose={() => setModalOpen(false)}
       />
-      <ErrorModal
-        open={errOpen}
-        message={errMsg}
-        onClose={() => setErrOpen(false)}
-        onRetry={errRetry ?? undefined}
-      />
     </>
   );
-} // ← コンポーネントの”最後の”波カッコを忘れずに！
+}

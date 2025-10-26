@@ -1,6 +1,7 @@
 // src/pages/Weekly.tsx
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { fetchDailyFromForecast } from "@/lib/openweather";
+import { useError } from "@/contexts/ErrorContext";
 
 const enWeek = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 const CARD_W = 250;
@@ -83,18 +84,24 @@ function DayCard({ d }: { d: Day }) {
 export default function Weekly() {
   const [days, setDays] = useState<Day[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const showError = useError();
+
+  const lat = 35.6895, lon = 139.6917;
+
+  const refetchWeekly = useCallback(async () => {
+    try { // 修正
+      const daily = await fetchDailyFromForecast(lat, lon);
+      setDays(daily as Day[]);
+      setError(null); // 修正: 画面内の赤字は使わないためクリア
+    } catch (e: any) { // 修正
+      showError(e, { retry: refetchWeekly }); // 修正: 共通モーダルへ
+      setError(null); // 修正
+    }
+  }, [lat, lon, showError]);
 
   useEffect(() => {
-    const lat = 35.6895, lon = 139.6917; // まずは固定
-    (async () => {
-      try {
-        const daily = await fetchDailyFromForecast(lat, lon);
-        setDays(daily as Day[]);
-      } catch (e: any) {
-        setError(e?.message ?? String(e));
-      }
-    })();
-  }, []);
+    refetchWeekly(); // 修正: 初回ロードで再取得
+  }, [refetchWeekly]);
 
   if (!days && !error) return <div style={{ padding: 16 }}>読み込み中…</div>;
   if (error) return <div style={{ padding: 16, color: "#e03131" }}>{error}</div>;
