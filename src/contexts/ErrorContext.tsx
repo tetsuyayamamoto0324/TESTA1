@@ -1,8 +1,10 @@
 // src/contexts/ErrorContext.tsx
+// src/contexts/ErrorContext.tsx
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import ErrorModal from "@/components/ErrorModal";
-import NetworkErrorModal from "@/components/NetworkErrorModal";
+import ErrorModal from "@/components/modal/ErrorModal";
+import NetworkErrorModal from "@/components/modal/NetworkErrorModal";
 import { AppErrorKind, normalizeError, messageFor } from "@/lib/appError";
+
 
 // グローバルの showError API 型
 type ShowError = (err: unknown, opts?: { title?: string; retry?: () => void; fallbackMessage?: string }) => void;

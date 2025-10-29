@@ -69,16 +69,18 @@ export default function Signup() {
 
     const parsed = schema.safeParse({ email, password });
     if (!parsed.success) {
-      const fe = parsed.error.flatten().fieldErrors;
-      setEmailErr(fe.email?.[0] ?? null);
-      setPasswordErr(fe.password?.[0] ?? null);
-      // バリデーションエラーもモーダルで通知したい場合（任意）
-      showError(new Error(fe.email?.[0] ?? fe.password?.[0] ?? "入力が不正です"), {
-        title: "入力が正しくありません",
-        fallbackMessage: "入力の形式が正しくありません。内容をご確認ください。",
-      }); // 修正（任意）
-      return;
-    }
+  const fe = parsed.error.flatten().fieldErrors;
+  setEmailErr(fe.email?.[0] ?? null);
+  setPasswordErr(fe.password?.[0] ?? null);
+
+  // ▼ この showError は図のフローでは不要なので削除 or コメントアウト
+  // showError(new Error(fe.email?.[0] ?? fe.password?.[0] ?? "入力が不正です"), {
+  //   title: "入力が正しくありません",
+  //   fallbackMessage: "入力の形式が正しくありません。内容をご確認ください。",
+  // });
+
+  return;
+}
     setEmailErr(null);
     setPasswordErr(null);
 

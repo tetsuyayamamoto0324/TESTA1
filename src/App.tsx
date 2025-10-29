@@ -4,15 +4,16 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { MantineProvider, AppShell } from "@mantine/core";
 
 import { useAuth } from "./store/auth";
-import ProtectedRoute from "./components/ProtectedRoute";
-import ProtectedLayout from "./components/ProtectedLayout";
+import ProtectedRoute from "./components/layout/ProtectedRoute";
+import ProtectedLayout from "./components/layout/ProtectedLayout";
+import AuthGate from "./components/modal/AuthGate";
 
 import Login from "./pages/Auth/Login";
 import Signup from "./pages/Auth/Signup";
-import Today from "./pages/Today";
-import Weekly from "./pages/Weekly";
-import CalendarTodo from "./pages/CalendarTodo";
-import CitySearch from "./pages/CitySearch";
+import Today from "./pages/today/Today";
+import Weekly from "./pages/Weekly/Weekly";
+import CalendarTodo from "./pages/Todo/CalendarTodo";
+import CitySearch from "./pages/City/CitySearch";
 
 export default function App() {
   const { init } = useAuth();
@@ -28,8 +29,8 @@ export default function App() {
     <MantineProvider>
       <BrowserRouter>
         <AppShell header={{ height: 0 }} padding="md">
+          <AuthGate />
           <Routes>
-            {/* 認証が必要なルート */}
             <Route element={<ProtectedRoute />}>
               <Route element={<ProtectedLayout />}>
                 <Route path="/" element={<Today />} />

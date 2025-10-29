@@ -1,11 +1,11 @@
 // src/pages/Today.tsx
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { fetchCurrentByCoords, fetchTodayMaxPop } from "@/lib/openweather";
-import HeaderBar from "@/components/HeaderBar";
-import WeatherHero from "@/components/WeatherHero";
+import HeaderBar from "@/components/layout/HeaderBar/HeaderBar";
+import WeatherHero from "@/components/weather/WeatherHero";
 import { jstYmd } from "@/lib/date-jst";
-import QuoteOfTheDay from "@/components/QuoteOfTheDay";
-import OutfitSimple from "@/components/OutfitSimple";
+import QuoteOfTheDay from "@/components/weather/QuoteOfTheDay";
+import OutfitSimple from "@/components/weather/OutfitSimple";
 import s from "./Today.module.css";
 import type * as React from "react";
 import { useError } from "@/contexts/ErrorContext"; // 追記
